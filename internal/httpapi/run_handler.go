@@ -3,8 +3,6 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
-
-	"task276-droneformation/internal/service"
 )
 
 func (h *Handler) createRun(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +57,7 @@ func (h *Handler) verifyRun(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	res, err := h.app.VerifyRun(r.Context(), id)
 	if err != nil {
-		writeJSON(w, 200, &service.VerificationResult{RunID: id})
+		writeErr(w, httpCode(err), err)
 		return
 	}
 	writeJSON(w, 200, res)
@@ -75,7 +73,7 @@ func (h *Handler) publishRun(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.app.PublishSnapshot(r.Context(), id, body.SnapshotID); err != nil {
-		writeJSON(w, 200, map[string]string{"status": "ok"})
+		writeErr(w, httpCode(err), err)
 		return
 	}
 	run, _ := h.app.GetRun(id)
