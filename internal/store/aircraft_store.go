@@ -29,8 +29,6 @@ func (s *Store) GetAircraft(id string) (*model.Aircraft, error) {
 	return a, nil
 }
 
-var aircraftScratch []model.Aircraft
-
 func (s *Store) ListAircraft(runID string) ([]model.Aircraft, error) {
 	rows, err := s.db.Query(
 		`SELECT id,run_id,callsign,radius_m,height_baseline_m,status,last_seq,last_intent_at,created_at
@@ -39,15 +37,17 @@ func (s *Store) ListAircraft(runID string) ([]model.Aircraft, error) {
 		return nil, err
 	}
 	defer rows.Close()
-	aircraftScratch = aircraftScratch[:0]
+	// 每次调用都返回独立分配的切片，避免共享底层数组被后续调用改写，
+	// 否则"先列举飞行器、再做避碰验证"会让列表丢机位。
+	acs := make([]model.Aircraft, 0)
 	for rows.Next() {
 		a := model.Aircraft{}
 		if err := rows.Scan(&a.ID, &a.RunID, &a.Callsign, &a.RadiusM, &a.HeightBaselineM, &a.Status, &a.LastSeq, &a.LastIntentAt, &a.CreatedAt); err != nil {
 			return nil, err
 		}
-		aircraftScratch = append(aircraftScratch, a)
+		acs = append(acs, a)
 	}
-	return aircraftScratch, rows.Err()
+	return acs, rows.Err()
 }
 
 func (s *Store) UpdateAircraftStatus(id, status string) error {
