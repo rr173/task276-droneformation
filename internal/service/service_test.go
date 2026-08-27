@@ -3,7 +3,9 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"task276-droneformation/internal/model"
@@ -71,5 +73,64 @@ func TestFullFlowConflictThenSeal(t *testing.T) {
 	// 封存后再次验证应被拒绝。
 	if _, err := app.VerifyRun(ctx, run.ID); !errors.Is(err, model.ErrRunSealed) {
 		t.Fatalf("expected sealed error, got %v", err)
+	}
+}
+
+// TestIngestIntentConcurrent 模拟编队内二十架飞行器同时上报各自的意图段：
+// 全部必须成功落库，并发不得互相踩事务或卡死。
+func TestIngestIntentConcurrent(t *testing.T) {
+	app, cleanup := newTestApp(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	run, err := app.CreateRun(ctx, "swarm")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const n = 20
+	ids := make([]string, n)
+	for i := 0; i < n; i++ {
+		ac, err := app.RegisterAircraft(ctx, run.ID, fmt.Sprintf("AC%d", i), 0.5, 0)
+		if err != nil {
+			t.Fatalf("register %d: %v", i, err)
+		}
+		ids[i] = ac.ID
+	}
+
+	base := int64(1_700_000_000_000)
+	var wg sync.WaitGroup
+	errs := make(chan error, n)
+	wg.Add(n)
+	for i := range ids {
+		i := i
+		go func() {
+			defer wg.Done()
+			_, err := app.IngestIntent(ctx, run.ID, ids[i], IntentInput{
+				Seq: 1, TStart: base + 1000, TEnd: base + 5000,
+				PosX: float64(i), SigX: 0.5, SigY: 0.5, SigZ: 0.5,
+			})
+			errs <- err
+		}()
+	}
+	wg.Wait()
+	close(errs)
+
+	var failed int
+	for err := range errs {
+		if err != nil {
+			failed++
+			t.Logf("ingest failed: %v", err)
+		}
+	}
+	if failed > 0 {
+		t.Fatalf("%d/%d concurrent ingests failed", failed, n)
+	}
+
+	its, err := app.ListIntentsByRun(run.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(its) != n {
+		t.Fatalf("expected %d persisted intents, got %d", n, len(its))
 	}
 }
