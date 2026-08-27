@@ -36,6 +36,7 @@ func (s *Store) ListRuns() ([]model.FormationRun, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
 	var out []model.FormationRun
 	for rows.Next() {
 		r := model.FormationRun{}

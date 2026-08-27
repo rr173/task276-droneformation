@@ -75,8 +75,16 @@ func (s *Store) ListIntentsByRun(runID string) ([]model.IntentSegment, error) {
 	if err != nil {
 		return nil, err
 	}
-	_ = rows
-	return []model.IntentSegment{}, nil
+	defer rows.Close()
+	var out []model.IntentSegment
+	for rows.Next() {
+		it, err := scanIntent(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, it)
+	}
+	return out, rows.Err()
 }
 
 func (s *Store) SetIntentStatus(id int64, status string) error {
