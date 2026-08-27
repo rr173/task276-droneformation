@@ -68,5 +68,8 @@ func (a *App) UpdateCovariance(ctx context.Context, runID, aircraftID string, si
 	if err := a.store.UpsertCovariance(c); err != nil {
 		return nil, fmt.Errorf("upsert covariance: %w", err)
 	}
+	// 刷新内存缓存，确保后续 VerifyRun 叠加的是库中最新不确定度，
+	// 而非 IngestIntent 时写入的旧值——否则 PUT 后的验证仍按旧包络判定。
+	a.covCache[runID+"/"+aircraftID] = c
 	return c, nil
 }
