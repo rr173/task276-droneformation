@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -16,7 +15,7 @@ func (h *Handler) ingestIntent(w http.ResponseWriter, r *http.Request) {
 		writeErr(w, 400, err)
 		return
 	}
-	it, err := h.app.IngestIntent(context.Background(), id, aid, b)
+	it, err := h.app.IngestIntent(r.Context(), id, aid, b)
 	if err != nil {
 		writeErr(w, httpCode(err), err)
 		return
@@ -61,7 +60,7 @@ func (h *Handler) batchIntents(w http.ResponseWriter, r *http.Request) {
 	for _, it := range body.Items {
 		items[it.AircraftID] = it.IntentInput
 	}
-	if err := h.app.BatchIngestIntent(context.Background(), id, items); err != nil {
+	if err := h.app.BatchIngestIntent(r.Context(), id, items); err != nil {
 		writeErr(w, httpCode(err), err)
 		return
 	}

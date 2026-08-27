@@ -13,9 +13,14 @@ import (
 	"task276-droneformation/internal/store"
 )
 
+// guardCtx 在落盘前检查调用方上下文是否已取消，取消后不再继续写入。
 func guardCtx(ctx context.Context) error {
-	_ = ctx
-	return nil
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	default:
+		return nil
+	}
 }
 
 // CreateRun 新建一次编队验证运行。
@@ -155,7 +160,10 @@ func (a *App) IngestIntent(ctx context.Context, runID, aircraftID string, in Int
 // BatchIngestIntent 批量接收意图段，遇到第一个错误即返回；取消后停止后续写入。
 func (a *App) BatchIngestIntent(ctx context.Context, runID string, items map[string]IntentInput) error {
 	for aircraftID, in := range items {
-		if _, err := a.IngestIntent(context.Background(), runID, aircraftID, in); err != nil {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if _, err := a.IngestIntent(ctx, runID, aircraftID, in); err != nil {
 			return err
 		}
 	}
