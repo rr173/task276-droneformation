@@ -4,8 +4,6 @@ import (
 	"context"
 	"fmt"
 
-	"task276-droneformation/internal/conflict"
-	"task276-droneformation/internal/intent"
 	"task276-droneformation/internal/model"
 )
 
@@ -48,55 +46,12 @@ func (a *App) GetRelation(id int64) (*model.AvoidanceRelation, error) {
 	return a.store.GetRelation(id)
 }
 
+// GetSnapshot 返回一份已冻结的安全快照。安全快照是不可变件：其
+// ConflictCount/SafeCount/Status 在验证时刻就已锁定，不会因事后注入
+// 新意图、改协方差或隔离飞行器等现场数据变化而改写。此处仅做读出，
+// 不再从实时意图重新推导，以保证快照记录的历史结论稳定。
 func (a *App) GetSnapshot(id int64) (*model.SafetySnapshot, error) {
-	snap, err := a.store.GetSnapshot(id)
-	if err != nil {
-		return nil, err
-	}
-	run, err := a.store.GetRun(snap.RunID)
-	if err != nil {
-		return snap, nil
-	}
-	acs, err := a.store.ListAircraft(snap.RunID)
-	if err != nil || run == nil {
-		return snap, nil
-	}
-	now := a.now()
-	var intents []model.IntentSegment
-	for _, ac := range acs {
-		if ac.Status == model.AircraftIsolated {
-			continue
-		}
-		segs, listErr := a.store.ListIntentsByAircraft(snap.RunID, ac.ID)
-		if listErr != nil {
-			continue
-		}
-		it, ok := intent.LatestActive(segs, now)
-		if !ok {
-			continue
-		}
-		cov, _ := a.store.GetCovariance(snap.RunID, ac.ID)
-		overlayLiveCovariance(&it, cov)
-		intents = append(intents, it)
-	}
-	conf := 0
-	if len(intents) >= 2 {
-		t0, t1, ok := intent.CommonWindow(intents)
-		if ok {
-			step := intent.SampleStep(t0, t1)
-			for i := 0; i < len(intents); i++ {
-				for j := i + 1; j < len(intents); j++ {
-					gap := run.MinSeparationM + 1.0
-					pr := conflict.EvaluatePair(intents[i], intents[j], t0, t1, step, run.ConfidenceK, gap)
-					if pr.Status == model.RelationInsufficient {
-						conf++
-					}
-				}
-			}
-		}
-	}
-	snap.ConflictCount = conf
-	return snap, nil
+	return a.store.GetSnapshot(id)
 }
 func (a *App) ListSnapshots(runID string) ([]model.SafetySnapshot, error) {
 	return a.store.ListSnapshots(runID)
