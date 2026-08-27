@@ -47,8 +47,6 @@ func scanIntent(scanner interface {
 	return it, err
 }
 
-var intentScratch []model.IntentSegment
-
 func (s *Store) ListIntentsByAircraft(runID, aircraftID string) ([]model.IntentSegment, error) {
 	rows, err := s.db.Query(
 		`SELECT id,run_id,aircraft_id,seq,t_start,t_end,pos_x,pos_y,pos_z,vel_x,vel_y,vel_z,
@@ -58,15 +56,17 @@ func (s *Store) ListIntentsByAircraft(runID, aircraftID string) ([]model.IntentS
 		return nil, err
 	}
 	defer rows.Close()
-	intentScratch = intentScratch[:0]
+	// 使用局部切片而非包级 intentScratch：后者会在多次调用间共享底层数组，
+	// 导致先列甲机意图、再列乙机意图时，甲机返回的切片底层数据被乙机覆盖。
+	var out []model.IntentSegment
 	for rows.Next() {
 		it, err := scanIntent(rows)
 		if err != nil {
 			return nil, err
 		}
-		intentScratch = append(intentScratch, it)
+		out = append(out, it)
 	}
-	return intentScratch, rows.Err()
+	return out, rows.Err()
 }
 
 func (s *Store) ListIntentsByRun(runID string) ([]model.IntentSegment, error) {

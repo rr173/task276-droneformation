@@ -60,3 +60,45 @@ func TestIntentSeqExists(t *testing.T) {
 		t.Fatalf("expected missing seq, err=%v ok=%v", err, ok)
 	}
 }
+
+// TestListIntentsByAircraftNoAliasing 回归：先列甲机意图，再列乙机意图，
+// 两者返回的切片不得共享底层数组——否则甲机的列表会被乙机的数据覆盖。
+func TestListIntentsByAircraftNoAliasing(t *testing.T) {
+	st, err := Open(filepath.Join(t.TempDir(), "aliasing.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	for _, ac := range []string{"jia", "yi"} {
+		// 甲机与乙机各插两条意图，用 X 坐标区分所属飞行器。
+		for seq := int64(1); seq <= 2; seq++ {
+			posX := 1.0
+			if ac == "yi" {
+				posX = 9.0
+			}
+			if err := st.InsertIntent(&model.IntentSegment{
+				RunID: "r", AircraftID: ac, Seq: seq, TStart: 1, TEnd: 2,
+				PosX: posX, Status: model.IntentRaw, CreatedAt: 1,
+			}); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+
+	jia, err := st.ListIntentsByAircraft("r", "jia")
+	if err != nil {
+		t.Fatal(err)
+	}
+	yi, err := st.ListIntentsByAircraft("r", "yi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 先列出的甲机切片内容不得因随后列出乙机而被改写。
+	if len(jia) != 2 || jia[0].AircraftID != "jia" || jia[0].PosX != 1.0 {
+		t.Fatalf("jia slice corrupted after listing yi: %+v", jia)
+	}
+	if len(yi) != 2 || yi[0].AircraftID != "yi" || yi[0].PosX != 9.0 {
+		t.Fatalf("yi slice unexpected: %+v", yi)
+	}
+}
