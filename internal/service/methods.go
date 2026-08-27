@@ -118,10 +118,11 @@ func (a *App) IngestIntent(ctx context.Context, runID, aircraftID string, in Int
 	}
 	exists, err := a.store.IntentSeqExists(runID, aircraftID, in.Seq)
 	if err != nil {
-		return nil, fmt.Errorf("check intent seq: %v", err)
+		return nil, fmt.Errorf("check intent seq: %w", err)
 	}
 	if exists {
-		return nil, fmt.Errorf("duplicate seq: %v", model.ErrDuplicateSeq)
+		// 用 %w 包装哨兵错误，保留错误链，使接口层可经 errors.Is 识别为冲突。
+		return nil, fmt.Errorf("duplicate seq: %w", model.ErrDuplicateSeq)
 	}
 	it := &model.IntentSegment{
 		RunID:             runID,

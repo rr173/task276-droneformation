@@ -3,6 +3,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"task276-droneformation/internal/model"
@@ -63,13 +64,16 @@ func writeErr(w http.ResponseWriter, code int, err error) {
 }
 
 // httpCode 将领域错误映射到合适的 HTTP 状态码。
+// 使用 errors.Is 而非直接相等比较，保证经 %w 包装过的领域错误
+// （例如 ErrDuplicateSeq 沿服务层错误链传递）仍可被识别，避免误判为 500。
 func httpCode(err error) int {
-	switch err {
-	case model.ErrRunNotFound, model.ErrAircraftNotFound:
+	switch {
+	case errors.Is(err, model.ErrRunNotFound), errors.Is(err, model.ErrAircraftNotFound):
 		return 404
-	case model.ErrRunSealed, model.ErrDuplicateSeq, model.ErrIntentInvalid,
-		model.ErrCovarianceIllegal, model.ErrSnapshotNotDraft, model.ErrNoCommonWindow,
-		model.ErrHeightMismatch:
+	case errors.Is(err, model.ErrRunSealed), errors.Is(err, model.ErrDuplicateSeq),
+		errors.Is(err, model.ErrIntentInvalid), errors.Is(err, model.ErrCovarianceIllegal),
+		errors.Is(err, model.ErrSnapshotNotDraft), errors.Is(err, model.ErrNoCommonWindow),
+		errors.Is(err, model.ErrHeightMismatch):
 		return 409
 	default:
 		return 500
