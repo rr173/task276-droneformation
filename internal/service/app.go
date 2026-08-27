@@ -4,6 +4,7 @@ package service
 import (
 	"fmt"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -13,8 +14,14 @@ import (
 
 // App 是编队避碰验证服务的核心应用对象。
 type App struct {
-	store       *store.Store
-	clock       func() int64
+	store *store.Store
+	clock func() int64
+
+	// cacheMu 保护 latestCache：HTTP 层每请求一个 goroutine，多架飞行器
+	// 并发 IngestIntent 时会同时写不同 key，普通 map 即便 key 不同也会
+	// 在并发写时触发数据竞争（且可能运行时 fatal）。写落库由 Store.mu
+	// 串行化保证安全，这里只针对内存缓存加锁。
+	cacheMu     sync.RWMutex
 	latestCache map[string]model.IntentSegment
 }
 

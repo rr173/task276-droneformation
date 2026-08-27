@@ -151,8 +151,24 @@ func (a *App) IngestIntent(ctx context.Context, runID, aircraftID string, in Int
 	}); err != nil {
 		return nil, fmt.Errorf("persist intent bundle: %w", err)
 	}
-	a.latestCache[runID+"/"+aircraftID] = *it
+	a.setLatestIntent(runID, aircraftID, *it)
 	return it, nil
+}
+
+// setLatestIntent 更新内存中的最新意图缓存；并发写入需持锁，避免与其它
+// 飞行器的写入产生 map 数据竞争。落库本身已由 Store 串行化保证安全。
+func (a *App) setLatestIntent(runID, aircraftID string, it model.IntentSegment) {
+	a.cacheMu.Lock()
+	defer a.cacheMu.Unlock()
+	a.latestCache[runID+"/"+aircraftID] = it
+}
+
+// latestIntent 返回某飞行器最新意图的拷贝与是否命中。
+func (a *App) latestIntent(runID, aircraftID string) (model.IntentSegment, bool) {
+	a.cacheMu.RLock()
+	defer a.cacheMu.RUnlock()
+	it, ok := a.latestCache[runID+"/"+aircraftID]
+	return it, ok
 }
 
 // BatchIngestIntent 批量接收意图段，遇到第一个错误即返回；取消后停止后续写入。
